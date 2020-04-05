@@ -1,0 +1,1 @@
+/usr/bin/clang++  -g  -rdynamic CMakeFiles/test.dir/test.cc.o CMakeFiles/test.dir/gutil.cc.o  -o test -lgio-2.0 -lgobject-2.0 -lglib-2.0 
