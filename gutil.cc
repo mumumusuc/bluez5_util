@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #define BLUEZ "org.bluez"
 #define BLUEZ_MANAGER_IFACE "org.freedesktop.DBus.ObjectManager"
@@ -18,15 +19,19 @@
 
 using namespace bluez;
 
-BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address, bool paired, bool connected)
-    : paired(paired), connected(connected), name_(const_cast<char *>(name)), address_(const_cast<char *>(address)) {
+bool bluez::operator==(const BluetoothEvent &p1, int p2) {
+    return (static_cast<BluetoothEventType>(p1) & p2) == p2;
+}
+
+BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address)
+    : name_(const_cast<char *>(name)), address_(const_cast<char *>(address)) {
     g_assert(conn && object_path);
     proxy = g_dbus_proxy_new_sync(conn, G_DBUS_PROXY_FLAGS_NONE, nullptr, BLUEZ, object_path, BLUEZ_DEVICE_IFACE, nullptr, nullptr);
     if (!proxy) throw std::runtime_error("get device proxy error");
 };
 
 BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path)
-    : BluetoothDevice{conn, object_path, nullptr, nullptr, false, false} {};
+    : BluetoothDevice{conn, object_path, nullptr, nullptr} {};
 
 BluetoothDevice::~BluetoothDevice() {
     g_object_unref(proxy);
@@ -34,28 +39,50 @@ BluetoothDevice::~BluetoothDevice() {
     free(address_);
 };
 
-inline const char *BluetoothDevice::object_path() {
+const char *BluetoothDevice::object_path() const {
     return g_dbus_proxy_get_object_path(proxy);
 }
 
-const char *BluetoothDevice::name() {
+const char *BluetoothDevice::name() const {
     if (!name_) {
         auto name = g_dbus_proxy_get_cached_property(proxy, "Name");
-        name_ = const_cast<char *>(g_variant_get_string(name, nullptr));
+        if (!name) return "";
+        g_variant_get(name, "s", &name_);
         g_variant_unref(name);
     }
     return name_;
 }
 
-const char *BluetoothDevice::address() {
+const char *BluetoothDevice::address() const {
     if (!address_) {
         auto address = g_dbus_proxy_get_cached_property(proxy, "Address");
-        address_ = const_cast<char *>(g_variant_get_string(address, nullptr));
+        if (!address) return "";
+        g_variant_get(address, "s", &address_);
         g_variant_unref(address);
     }
     return address_;
 }
 
+const bool BluetoothDevice::paired() const {
+    auto value = g_dbus_proxy_get_cached_property(proxy, "Paired");
+    auto paired = g_variant_get_boolean(value);
+    g_variant_unref(value);
+    return paired;
+}
+
+const bool BluetoothDevice::connected() const {
+    auto value = g_dbus_proxy_get_cached_property(proxy, "Connected");
+    auto connected = g_variant_get_boolean(value);
+    g_variant_unref(value);
+    return connected;
+}
+
+int BluetoothDevice::state() const {
+    auto state = connected() ? BluetoothEvent::EV_DEVICE_CONNECTED : paired() ? BluetoothEvent::EV_DEVICE_PAIRED : BluetoothEvent::EV_NONE;
+    return static_cast<BluetoothEventType>(state);
+}
+
+/*
 void BluetoothDevice::update_property() {
     auto paired = g_dbus_proxy_get_cached_property(proxy, "Paired");
     this->paired = g_variant_get_boolean(paired);
@@ -65,6 +92,7 @@ void BluetoothDevice::update_property() {
     this->connected = g_variant_get_boolean(connected);
     g_variant_unref(connected);
 }
+*/
 
 bool BluetoothDevice::Connect() {
     auto value = g_dbus_proxy_call_sync(proxy, "Connect", nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr);
@@ -100,8 +128,8 @@ std::string BluetoothDevice::to_string() {
     std::ostringstream ostr;
     ostr << "Name\t\t: " << name() << "\nAddress\t\t: " << address()
          << "\nPath\t\t: " << object_path()
-         << "\nPaired\t\t: " << std::boolalpha << paired
-         << "\nConnected\t: " << std::boolalpha << connected << std::endl;
+         << "\nPaired\t\t: " << std::boolalpha << paired()
+         << "\nConnected\t: " << std::boolalpha << connected() << std::endl;
     return ostr.str();
 }
 
@@ -121,18 +149,28 @@ BluezUtil::BluezUtil() {
         log("%s", "get adapter_proxy error");
         throw std::runtime_error("get adapter_proxy error");
     }
+    log("%s", "add listeners to bluez");
     adapter_handle = g_dbus_connection_signal_subscribe(conn, BLUEZ, BLUEZ_PROPERTY_IFACE, "PropertiesChanged", nullptr, BLUEZ_ADAPTER_IFACE, G_DBUS_SIGNAL_FLAGS_NONE, adapter_callback, this, nullptr);
     device_handle = g_dbus_connection_signal_subscribe(conn, BLUEZ, BLUEZ_PROPERTY_IFACE, "PropertiesChanged", nullptr, BLUEZ_DEVICE_IFACE, G_DBUS_SIGNAL_FLAGS_NONE, device_callback, this, nullptr);
     iface_added_handle = g_dbus_connection_signal_subscribe(conn, BLUEZ, BLUEZ_MANAGER_IFACE, "InterfacesAdded", nullptr, nullptr, G_DBUS_SIGNAL_FLAGS_NONE, iface_added_callback, this, nullptr);
     iface_removed_handle = g_dbus_connection_signal_subscribe(conn, BLUEZ, BLUEZ_MANAGER_IFACE, "InterfacesRemoved", nullptr, nullptr, G_DBUS_SIGNAL_FLAGS_NONE, iface_removed_callback, this, nullptr);
+    loop = g_main_loop_new(nullptr, false);
+    std::thread t_loop([this]() {
+        log("%s", "g_main_loop running");
+        g_main_loop_run(loop);
+        log("%s", "g_main_loop exit");
+    });
+    t_loop.detach();
 }
 
 BluezUtil::~BluezUtil() {
-    log("%s", "~BluezUtil");
+    //log("%s", "~BluezUtil");
     g_dbus_connection_signal_unsubscribe(conn, adapter_handle);
     g_dbus_connection_signal_unsubscribe(conn, device_handle);
     g_dbus_connection_signal_unsubscribe(conn, iface_added_handle);
     g_dbus_connection_signal_unsubscribe(conn, iface_removed_handle);
+    g_main_loop_quit(loop);
+    g_main_loop_unref(loop);
     g_object_unref(conn);
     g_object_unref(object_manager);
     g_object_unref(adapter_proxy);
@@ -146,12 +184,13 @@ int BluezUtil::GetAdapterState() {
     value = g_dbus_proxy_get_cached_property(adapter_proxy, "Powered");
     auto powered = g_variant_get_boolean(value);
     g_variant_unref(value);
-    return powered ? (discovering ? 2 : 1) : 0;
+    auto state = discovering ? BluetoothEvent::EV_ADAPTER_DISCOVERY_ON : powered ? BluetoothEvent::EV_ADAPTER_ON : BluetoothEvent::EV_NONE;
+    return static_cast<BluetoothEventType>(state);
 }
 
 int BluezUtil::GetDeviceState(const BluetoothDeviceRef &device) {
-    device->update_property();
-    return device->connected ? 2 : device->paired ? 1 : 0;
+    //device->update_property();
+    return device->state();
 }
 
 std::list<BluetoothDeviceRef> BluezUtil::GetDevices() {
@@ -167,30 +206,34 @@ std::list<BluetoothDeviceRef> BluezUtil::GetDevices() {
     }
     g_variant_get(result, "(a{oa{sa{sv}}})", &iter);
     while (g_variant_iter_next(iter, "{oa{sa{sv}}}", &object_path, &v_iter)) {
-        // log("path = %s", object_path);
+        //log("path = %s", object_path);
         if (strncmp(object_path, TARGET_PATH, strlen(TARGET_PATH)) == 0) {
             gchar *key;
             GVariantIter *vv_iter;
             while (g_variant_iter_next(v_iter, "{sa{sv}}", &key, &vv_iter)) {
-                // log("-- key = %s", key);
+                //log("-- key = %s", key);
                 auto ready = strcmp(key, TARGET_DEVICE) == 0;
                 if (ready) {
                     gchar *attr;
                     GVariant *value;
                     auto device = new BluetoothDevice(conn, object_path);
                     while (g_variant_iter_next(vv_iter, "{sv}", &attr, &value)) {
-                        // log("---- attr = %s", attr);
+                        //log("---- attr = %s, type = %s", attr, g_variant_get_type_string(value));
                         if (strcmp(attr, "Name") == 0) {
                             g_variant_get(value, "s", &device->name_);
                         } else if (strcmp(attr, "Address") == 0) {
                             g_variant_get(value, "s", &device->address_);
-                        } else if (strcmp(attr, "Paired") == 0) {
+                        }
+                        /*
+                        else if (strcmp(attr, "Paired") == 0) {
                             device->paired = g_variant_get_boolean(value);
                         } else if (strcmp(attr, "Connected") == 0) {
                             device->connected = g_variant_get_boolean(value);
                         }
+                        */
                         g_free(attr);
                         g_variant_unref(value);
+                        if (device->name_ && device->address_) break;
                     }
                     devices.emplace_back(device);
                 }
@@ -279,17 +322,17 @@ void BluezUtil::adapter_callback(GDBusConnection *connection, const gchar *sende
             auto v = g_variant_get_boolean(value);
             log("%s : %u", key, v);
             if (v)
-                util->callback(EV_ADAPTER_DISCOVERY_ON, nullptr);
+                util->callback(BluetoothEvent::EV_ADAPTER_DISCOVERY_ON, nullptr);
             else
-                util->callback(EV_ADAPTER_DISCOVERY_OFF, nullptr);
+                util->callback(BluetoothEvent::EV_ADAPTER_DISCOVERY_OFF, nullptr);
         } else if (strcmp(key, "Powered") == 0) {
             // on/off
             auto v = g_variant_get_boolean(value);
             log("%s : %u", key, v);
             if (v)
-                util->callback(EV_ADAPTER_ON, nullptr);
+                util->callback(BluetoothEvent::EV_ADAPTER_ON, nullptr);
             else
-                util->callback(EV_ADAPTER_OFF, nullptr);
+                util->callback(BluetoothEvent::EV_ADAPTER_OFF, nullptr);
         } /*
          else if (strcmp(key, "DiscoverableTimeout") == 0) {
             // discovery end
@@ -328,9 +371,9 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
             try {
                 BluetoothDevice device(util->conn, object_path);
                 if (v)
-                    util->callback(EV_DEVICE_CONNECTED, &device);
+                    util->callback(BluetoothEvent::EV_DEVICE_CONNECTED, &device);
                 else
-                    util->callback(EV_DEVICE_DISCONNECTED, &device);
+                    util->callback(BluetoothEvent::EV_DEVICE_DISCONNECTED, &device);
             } catch (std::runtime_error e) {}
         } else if (strcmp(key, "Paired") == 0) {
             auto v = g_variant_get_boolean(value);
@@ -338,9 +381,9 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
             try {
                 BluetoothDevice device(util->conn, object_path);
                 if (v)
-                    util->callback(EV_DEVICE_PAIRED, &device);
+                    util->callback(BluetoothEvent::EV_DEVICE_PAIRED, &device);
                 else
-                    util->callback(EV_DEVICE_UNPAIRED, &device);
+                    util->callback(BluetoothEvent::EV_DEVICE_UNPAIRED, &device);
             } catch (std::runtime_error e) {}
         }
         g_free(key);
@@ -385,14 +428,14 @@ void BluezUtil::iface_added_callback(GDBusConnection *connection, const gchar *s
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
-    gchar *path, *key, *attr;
-    GVariantIter *iter1, *iter2;
-    GVariant *value;
+    gchar *path;         //, *key, *attr;
+    GVariantIter *iter1; //, *iter2;
+    //GVariant *value;
     g_variant_get(parameters, "(oa{sa{sv}})", &path, &iter1);
     log("- %s", path);
     try {
         BluetoothDevice device(util->conn, path);
-        util->callback(EV_DEVICE_FOUND, &device);
+        util->callback(BluetoothEvent::EV_DEVICE_FOUND, &device);
     } catch (std::runtime_error e) {}
     // log("array size = %zu", g_variant_iter_n_children(iter));
     /*
@@ -424,13 +467,13 @@ void BluezUtil::iface_removed_callback(GDBusConnection *connection, const gchar 
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
-    gchar *path, *attr;
+    gchar *path; //, *attr;
     GVariantIter *iter;
     g_variant_get(parameters, "(oas)", &path, &iter);
     log("- %s", path);
     try {
         BluetoothDevice device(util->conn, path);
-        util->callback(EV_DEVICE_REMOVE, &device);
+        util->callback(BluetoothEvent::EV_DEVICE_REMOVE, &device);
     } catch (std::runtime_error e) {}
     // no need to parse detail
     /*

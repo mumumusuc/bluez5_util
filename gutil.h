@@ -11,25 +11,11 @@ namespace bluez {
 
 class BluetoothDevice;
 class BluezUtil;
-enum BluetoothEvent {
-    EV_ADAPTER_OFF,
-    EV_ADAPTER_ON,
-    EV_ADAPTER_DISCOVERY_OFF,
-    EV_ADAPTER_DISCOVERY_ON,
-    EV_DEVICE_FOUND,
-    EV_DEVICE_REMOVE,
-    EV_DEVICE_UNPAIRED,
-    EV_DEVICE_UNPAIRING,
-    EV_DEVICE_PAIRING,
-    EV_DEVICE_PAIRED,
-    EV_DEVICE_DISCONNECTED,
-    EV_DEVICE_DISCONNECTING,
-    EV_DEVICE_CONNECTING,
-    EV_DEVICE_CONNECTED,
-};
+enum class BluetoothEvent : int;
 
 using BluetoothDeviceRef = std::unique_ptr<BluetoothDevice>;
 using BluetoothEventCallback = std::function<void(BluetoothEvent, const BluetoothDevice *)>;
+using BluetoothEventType = std::underlying_type<BluetoothEvent>::type;
 
 class BluetoothDevice {
     friend class BluezUtil;
@@ -38,16 +24,19 @@ class BluetoothDevice {
     GDBusProxy *proxy;
     char *name_ = nullptr;
     char *address_ = nullptr;
-    bool paired;
-    bool connected;
-    void update_property();
-    const char *object_path();
+    //bool paired;
+    //bool connected;
+    //void update_property();
     explicit BluetoothDevice(GDBusConnection *conn, const char *object_path);
-    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address, bool paired, bool connected);
+    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address);
 
   public:
-    const char *name();
-    const char *address();
+    const char *name() const;
+    const char *address() const;
+    const bool paired() const;
+    const bool connected() const;
+    const char *object_path() const;
+    int state() const;
 
     ~BluetoothDevice();
 
@@ -59,6 +48,7 @@ class BluetoothDevice {
 
 class BluezUtil {
   private:
+    GMainLoop *loop;
     GDBusConnection *conn;
     GDBusProxy *object_manager;
     GDBusProxy *adapter_proxy;
@@ -88,6 +78,28 @@ class BluezUtil {
     bool Pair(const char *object_path);
 };
 
+enum class BluetoothEvent : int {
+    EV_NONE = 0,
+    EV_ADAPTER_OFF = 0x21,
+    EV_ADAPTER_ON = 0x22,
+    EV_ADAPTER_DISCOVERY_OFF = 0x23,
+    EV_ADAPTER_DISCOVERY_ON = 0x24,
+    EV_DEVICE_FOUND = 0x11,
+    EV_DEVICE_REMOVE = 0x12,
+    EV_DEVICE_UNPAIRED = 0x13,
+    EV_DEVICE_UNPAIRING = 0x14,
+    EV_DEVICE_PAIRING = 0x15,
+    EV_DEVICE_PAIRED = 0x16,
+    EV_DEVICE_DISCONNECTED = 0x17,
+    EV_DEVICE_DISCONNECTING = 0x18,
+    EV_DEVICE_CONNECTING = 0x19,
+    EV_DEVICE_CONNECTED = 0x1a,
+};
+static const int EV_ADAPTER = 0x20;
+static const int EV_DEVICE = 0x10;
+bool operator==(const BluetoothEvent &p1, int p2);
+
+// namespace bluez
 } // namespace bluez
 
 #endif

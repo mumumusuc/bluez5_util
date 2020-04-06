@@ -29,10 +29,10 @@ int main() {
     }
 
     util.RegisterListener([](BluetoothEvent event, const BluetoothDevice *device) {
-        cout << "event = " << event << ", device = " << device << endl;
+        cout << "event = " << (int)event << ", adapter ? " << (event == EV_ADAPTER) << ", device = " << device << endl;
     });
 
-    util.StartDiscovery(12);
+    util.StartDiscovery();
 
     GMainLoop *loop = g_main_loop_new(nullptr, false);
     g_main_loop_run(loop);
