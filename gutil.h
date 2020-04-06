@@ -6,6 +6,7 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 
 namespace bluez {
 
@@ -17,37 +18,44 @@ using BluetoothDeviceRef = std::unique_ptr<BluetoothDevice>;
 using BluetoothEventCallback = std::function<void(BluetoothEvent, const BluetoothDevice *)>;
 using BluetoothEventType = std::underlying_type<BluetoothEvent>::type;
 
+class BluezError {
+  public:
+    const int code;
+    const std::string message;
+    explicit BluezError(int code, const char *msg) noexcept;
+    explicit BluezError(const GError *error) noexcept;
+    ~BluezError() = default;
+};
+
 class BluetoothDevice {
     friend class BluezUtil;
 
   private:
     GDBusProxy *proxy;
-    char *name_ = nullptr;
-    char *address_ = nullptr;
-    //bool paired;
-    //bool connected;
-    //void update_property();
-    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path);
-    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address);
+    char *name_;
+    char *address_;
+    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path) throw(BluezError);
+    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address) throw(BluezError);
 
   public:
-    const char *name() const;
-    const char *address() const;
-    const bool paired() const;
-    const bool connected() const;
-    const char *object_path() const;
-    int state() const;
+    const char *name() const noexcept;
+    const char *address() const noexcept;
+    const bool paired() const throw(BluezError);
+    const bool connected() const throw(BluezError);
+    const char *object_path() const noexcept;
+    BluetoothEvent state() const throw(BluezError);
 
     ~BluetoothDevice();
 
-    bool Connect();
-    bool Disconnect();
-    bool Pair();
-    std::string to_string();
+    void Connect() throw(BluezError);
+    void Disconnect() throw(BluezError);
+    void Pair() throw(BluezError);
+    std::string to_string() throw(BluezError);
 };
 
 class BluezUtil {
   private:
+    std::mutex loop_mutex;
     GMainLoop *loop;
     GDBusConnection *conn;
     GDBusProxy *object_manager;
@@ -57,25 +65,24 @@ class BluezUtil {
     guint iface_added_handle;
     guint iface_removed_handle;
     BluetoothEventCallback callback;
-    static void adapter_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer);
-    static void device_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer);
-    static void iface_added_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer);
-    static void iface_removed_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer);
+    static void adapter_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer) noexcept;
+    static void device_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer) noexcept;
+    static void iface_added_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer) noexcept;
+    static void iface_removed_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer) noexcept;
 
   public:
-    explicit BluezUtil();
+    explicit BluezUtil() throw(BluezError);
     ~BluezUtil();
-    void RegisterListener(BluetoothEventCallback callback);
-    int GetAdapterState();
-    int GetDeviceState(const BluetoothDeviceRef &device);
+    void RegisterListener(BluetoothEventCallback callback) noexcept;
+    BluetoothEvent GetAdapterState() throw(BluezError);
     // adapter methods
-    bool StartDiscovery();
-    bool StopDiscovery();
-    std::list<BluetoothDeviceRef> GetDevices();
+    void StartDiscovery() throw(BluezError);
+    void StopDiscovery() throw(BluezError);
+    std::list<BluetoothDeviceRef> GetDevices() throw(BluezError);
     // device methods
-    bool Connect(const char *object_path);
-    bool Disconnect(const char *object_path);
-    bool Pair(const char *object_path);
+    void Connect(const char *object_path) throw(BluezError);
+    void Disconnect(const char *object_path) throw(BluezError);
+    void Pair(const char *object_path) throw(BluezError);
 };
 
 enum class BluetoothEvent : int {
@@ -97,8 +104,8 @@ enum class BluetoothEvent : int {
 };
 static const int EV_ADAPTER = 0x20;
 static const int EV_DEVICE = 0x10;
-bool operator==(const BluetoothEvent &p1, int p2);
-
+bool operator==(const BluetoothEvent &p1, int p2) noexcept;
+int BluetoothEventValue(const BluetoothEvent &event) noexcept;
 // namespace bluez
 } // namespace bluez
 

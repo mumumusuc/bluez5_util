@@ -16,13 +16,5 @@ include_directories(${GIO_INCLUDE_DIRS})
 link_directories(${GIO_LIBRARY_DIRS})
 message(STATUS "gio -> ${GIO_LIBRARIES}")
 
-pkg_check_modules(PY3 python3) 
-include_directories(${PY3_INCLUDE_DIRS})
-link_directories(${PY3_LIBRARY_DIRS})
-message(STATUS "python3 -> ${PY3_INCLUDE_DIRS}")
-
-add_executable(${PROJECT_NAME} main.cc util.cc)
-target_link_libraries(${PROJECT_NAME} ${PY3_LIBRARIES})
-
 add_executable(test test.cc gutil.cc)
 target_link_libraries(test ${GIO_LIBRARIES} "pthread")

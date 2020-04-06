@@ -81,6 +81,7 @@
         "__string": "cpp",
         "iostream": "cpp",
         "thread.hpp": "c",
-        "tools.hpp": "c"
+        "tools.hpp": "c",
+        "cinttypes": "cpp"
     }
 }
