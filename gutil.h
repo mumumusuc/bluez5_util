@@ -34,23 +34,23 @@ class BluetoothDevice {
     GDBusProxy *proxy;
     char *name_;
     char *address_;
-    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path) throw(BluezError);
-    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address) throw(BluezError);
+    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path);
+    explicit BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address) ;
 
   public:
     const char *name() const noexcept;
     const char *address() const noexcept;
-    const bool paired() const throw(BluezError);
-    const bool connected() const throw(BluezError);
+    const bool paired() const ;
+    const bool connected() const ;
     const char *object_path() const noexcept;
-    BluetoothEvent state() const throw(BluezError);
+    BluetoothEvent state() const ;
 
     ~BluetoothDevice();
 
-    void Connect() throw(BluezError);
-    void Disconnect() throw(BluezError);
-    void Pair() throw(BluezError);
-    std::string to_string() throw(BluezError);
+    void Connect() ;
+    void Disconnect() ;
+    void Pair() ;
+    std::string to_string() ;
 };
 
 class BluezUtil {
@@ -71,18 +71,18 @@ class BluezUtil {
     static void iface_removed_callback(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *, GVariant *, gpointer) noexcept;
 
   public:
-    explicit BluezUtil() throw(BluezError);
+    explicit BluezUtil() ;
     ~BluezUtil();
     void RegisterListener(BluetoothEventCallback callback) noexcept;
-    BluetoothEvent GetAdapterState() throw(BluezError);
+    BluetoothEvent GetAdapterState() ;
     // adapter methods
-    void StartDiscovery() throw(BluezError);
-    void StopDiscovery() throw(BluezError);
-    std::list<BluetoothDeviceRef> GetDevices() throw(BluezError);
+    void StartDiscovery() ;
+    void StopDiscovery() ;
+    std::list<BluetoothDeviceRef> GetDevices() ;
     // device methods
-    void Connect(const char *object_path) throw(BluezError);
-    void Disconnect(const char *object_path) throw(BluezError);
-    void Pair(const char *object_path) throw(BluezError);
+    void Connect(const char *object_path) ;
+    void Disconnect(const char *object_path) ;
+    void Pair(const char *object_path) ;
 };
 
 enum class BluetoothEvent : int {

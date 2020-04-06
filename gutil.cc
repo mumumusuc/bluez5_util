@@ -18,7 +18,7 @@
 
 using namespace bluez;
 
-static inline GVariant *proxy_call(GDBusProxy *proxy, const char *name) throw(BluezError) {
+static inline GVariant *proxy_call(GDBusProxy *proxy, const char *name)  {
     GError *err = nullptr;
     auto value = g_dbus_proxy_call_sync(proxy, name, nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &err);
     if (!value) {
@@ -30,7 +30,7 @@ static inline GVariant *proxy_call(GDBusProxy *proxy, const char *name) throw(Bl
     return value;
 }
 
-static inline GVariant *proxy_get_property(GDBusProxy *proxy, const char *name) throw(BluezError) {
+static inline GVariant *proxy_get_property(GDBusProxy *proxy, const char *name)  {
     auto value = g_dbus_proxy_get_cached_property(proxy, name);
     if (!value) {
         log("Property '%s' not exist", name);
@@ -42,7 +42,7 @@ bool bluez::operator==(const BluetoothEvent &p1, int p2) noexcept {
     return (static_cast<BluetoothEventType>(p1) & p2) == p2;
 }
 
-int BluetoothEventValue(const BluetoothEvent &event) noexcept {
+int bluez::BluetoothEventValue(const BluetoothEvent &event) noexcept {
     return static_cast<BluetoothEventType>(event);
 }
 
@@ -50,7 +50,7 @@ BluezError::BluezError(int code, const char *msg) noexcept : code(code), message
 
 BluezError::BluezError(const GError *error) noexcept : BluezError{error->code, error->message} {}
 
-BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address) throw(BluezError)
+BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path, const char *name, const char *address) 
     : name_(const_cast<char *>(name)), address_(const_cast<char *>(address)) {
     g_assert(conn && object_path);
     GError *err = nullptr;
@@ -63,7 +63,7 @@ BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path,
     }
 };
 
-BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path) throw(BluezError)
+BluetoothDevice::BluetoothDevice(GDBusConnection *conn, const char *object_path) 
     : BluetoothDevice{conn, object_path, nullptr, nullptr} {};
 
 BluetoothDevice::~BluetoothDevice() {
@@ -102,40 +102,40 @@ const char *BluetoothDevice::address() const noexcept {
     return address_;
 }
 
-const bool BluetoothDevice::paired() const throw(BluezError) {
+const bool BluetoothDevice::paired() const  {
     auto value = proxy_get_property(proxy, "Paired");
     auto paired = g_variant_get_boolean(value);
     g_variant_unref(value);
     return paired;
 }
 
-const bool BluetoothDevice::connected() const throw(BluezError) {
+const bool BluetoothDevice::connected() const  {
     auto value = proxy_get_property(proxy, "Connected");
     auto connected = g_variant_get_boolean(value);
     g_variant_unref(value);
     return connected;
 }
 
-BluetoothEvent BluetoothDevice::state() const throw(BluezError) {
+BluetoothEvent BluetoothDevice::state() const  {
     return connected() ? BluetoothEvent::EV_DEVICE_CONNECTED : paired() ? BluetoothEvent::EV_DEVICE_PAIRED : BluetoothEvent::EV_NONE;
 }
 
-void BluetoothDevice::Connect() throw(BluezError) {
+void BluetoothDevice::Connect()  {
     auto value = proxy_call(proxy, "Connect");
     g_variant_unref(value);
 }
 
-void BluetoothDevice::Disconnect() throw(BluezError) {
+void BluetoothDevice::Disconnect()  {
     auto value = proxy_call(proxy, "Disconnect");
     g_variant_unref(value);
 }
 
-void BluetoothDevice::Pair() throw(BluezError) {
+void BluetoothDevice::Pair()  {
     auto value = proxy_call(proxy, "Pair");
     g_variant_unref(value);
 }
 
-std::string BluetoothDevice::to_string() throw(BluezError) {
+std::string BluetoothDevice::to_string()  {
     std::ostringstream ostr;
     ostr << "Name\t\t: " << name() << "\nAddress\t\t: " << address()
          << "\nPath\t\t: " << object_path()
@@ -144,7 +144,7 @@ std::string BluetoothDevice::to_string() throw(BluezError) {
     return ostr.str();
 }
 
-BluezUtil::BluezUtil() throw(BluezError) {
+BluezUtil::BluezUtil()  {
     GError *err = nullptr;
     conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, &err);
     if (!conn) {
@@ -203,7 +203,7 @@ BluezUtil::~BluezUtil() {
     g_object_unref(adapter_proxy);
 }
 
-BluetoothEvent BluezUtil::GetAdapterState() throw(BluezError) {
+BluetoothEvent BluezUtil::GetAdapterState()  {
     GVariant *value = nullptr;
     value = proxy_get_property(adapter_proxy, "Discovering");
     auto discovering = g_variant_get_boolean(value);
@@ -215,7 +215,7 @@ BluetoothEvent BluezUtil::GetAdapterState() throw(BluezError) {
     return discovering ? BluetoothEvent::EV_ADAPTER_DISCOVERY_ON : powered ? BluetoothEvent::EV_ADAPTER_ON : BluetoothEvent::EV_NONE;
 }
 
-std::list<BluetoothDeviceRef> BluezUtil::GetDevices() throw(BluezError) {
+std::list<BluetoothDeviceRef> BluezUtil::GetDevices()  {
     std::list<BluetoothDeviceRef> devices;
     GVariant *result;
     GVariantIter *iter;
@@ -242,13 +242,6 @@ std::list<BluetoothDeviceRef> BluezUtil::GetDevices() throw(BluezError) {
                         } else if (strcmp(attr, "Address") == 0) {
                             g_variant_get(value, "s", &device->address_);
                         }
-                        /*
-                        else if (strcmp(attr, "Paired") == 0) {
-                            device->paired = g_variant_get_boolean(value);
-                        } else if (strcmp(attr, "Connected") == 0) {
-                            device->connected = g_variant_get_boolean(value);
-                        }
-                        */
                         g_free(attr);
                         g_variant_unref(value);
                         if (device->name_ && device->address_) break;
@@ -268,12 +261,12 @@ std::list<BluetoothDeviceRef> BluezUtil::GetDevices() throw(BluezError) {
     return devices;
 }
 
-void BluezUtil::StartDiscovery() throw(BluezError) {
+void BluezUtil::StartDiscovery()  {
     auto result = proxy_call(adapter_proxy, "StartDiscovery");
     g_variant_unref(result);
 }
 
-void BluezUtil::StopDiscovery() throw(BluezError) {
+void BluezUtil::StopDiscovery()  {
     auto result = proxy_call(adapter_proxy, "StopDiscovery");
     g_variant_unref(result);
 }
@@ -282,19 +275,19 @@ void BluezUtil::RegisterListener(BluetoothEventCallback callback) noexcept {
     this->callback = callback;
 }
 
-void BluezUtil::Connect(const char *object_path) throw(BluezError) {
+void BluezUtil::Connect(const char *object_path)  {
     g_assert(object_path);
     BluetoothDevice device(conn, object_path);
     return device.Connect();
 }
 
-void BluezUtil::Disconnect(const char *object_path) throw(BluezError) {
+void BluezUtil::Disconnect(const char *object_path)  {
     g_assert(object_path);
     BluetoothDevice device(conn, object_path);
     return device.Disconnect();
 }
 
-void BluezUtil::Pair(const char *object_path) throw(BluezError) {
+void BluezUtil::Pair(const char *object_path)  {
     g_assert(object_path);
     BluetoothDevice device(conn, object_path);
     return device.Pair();
@@ -308,7 +301,7 @@ void BluezUtil::Pair(const char *object_path) throw(BluezError) {
 ** Message: 15:19:04.532: Discovering : 1
 */
 void BluezUtil::adapter_callback(GDBusConnection *connection, const gchar *sender_name, const gchar *object_path, const gchar *interface_name, const gchar *signal_name, GVariant *parameters, gpointer user_data) noexcept {
-    log("adapter_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
+    //log("adapter_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
@@ -316,13 +309,13 @@ void BluezUtil::adapter_callback(GDBusConnection *connection, const gchar *sende
     GVariant *value;
     GVariantIter *iter1, *iter2;
     g_variant_get(parameters, "(sa{sv}as)", &str, &iter1, &iter2);
-    log("str = %s", str);
+    //log("str = %s", str);
     while (g_variant_iter_next(iter1, "{sv}", &key, &value)) {
-        log("%s : type(%s)", key, g_variant_get_type_string(value));
+        //log("%s : type(%s)", key, g_variant_get_type_string(value));
         if (strcmp(key, "Discovering") == 0) {
             // discovery begin
             auto v = g_variant_get_boolean(value);
-            log("%s : %u", key, v);
+            //log("%s : %u", key, v);
             if (v)
                 util->callback(BluetoothEvent::EV_ADAPTER_DISCOVERY_ON, nullptr);
             else
@@ -330,18 +323,12 @@ void BluezUtil::adapter_callback(GDBusConnection *connection, const gchar *sende
         } else if (strcmp(key, "Powered") == 0) {
             // on/off
             auto v = g_variant_get_boolean(value);
-            log("%s : %u", key, v);
+            //log("%s : %u", key, v);
             if (v)
                 util->callback(BluetoothEvent::EV_ADAPTER_ON, nullptr);
             else
                 util->callback(BluetoothEvent::EV_ADAPTER_OFF, nullptr);
-        } /*
-         else if (strcmp(key, "DiscoverableTimeout") == 0) {
-            // discovery end
-            auto v = g_variant_get_uint32(value);
-            log("%s : %u", key, v);
-            util->callback(EV_ADAPTER_DISCOVERY_OFF, nullptr);
-        }*/
+        }
         g_free(key);
         g_variant_unref(value);
     }
@@ -356,7 +343,7 @@ void BluezUtil::adapter_callback(GDBusConnection *connection, const gchar *sende
 ** Message: 15:41:06.960: array size = 0
 */
 void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender_name, const gchar *object_path, const gchar *interface_name, const gchar *signal_name, GVariant *parameters, gpointer user_data) noexcept {
-    log("device_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
+    //log("device_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
@@ -364,12 +351,12 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
     GVariant *value;
     GVariantIter *iter1, *iter2;
     g_variant_get(parameters, "(sa{sv}as)", &str, &iter1, &iter2);
-    log("- %s", str);
+    //log("- %s", str);
     while (g_variant_iter_next(iter1, "{sv}", &key, &value)) {
-        log("-- %s : type(%s)", key, g_variant_get_type_string(value));
+        //log("-- %s : type(%s)", key, g_variant_get_type_string(value));
         if (strcmp(key, "Connected") == 0) {
             auto v = g_variant_get_boolean(value);
-            log("-- %s : %u", key, v);
+            //log("-- %s : %u", key, v);
             try {
                 BluetoothDevice device(util->conn, object_path);
                 if (v)
@@ -379,7 +366,7 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
             } catch (std::runtime_error e) {}
         } else if (strcmp(key, "Paired") == 0) {
             auto v = g_variant_get_boolean(value);
-            log("-- %s : %u", key, v);
+            //log("-- %s : %u", key, v);
             try {
                 BluetoothDevice device(util->conn, object_path);
                 if (v)
@@ -391,13 +378,6 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
         g_free(key);
         g_variant_unref(value);
     }
-    /*
-    log("array size = %zu", g_variant_iter_n_children(iter2));
-    while (g_variant_iter_next(iter2, "s", &key)) {
-        log("- %s", key);
-        g_free(key);
-    }
-    */
     g_free(str);
     g_variant_iter_free(iter1);
     g_variant_iter_free(iter2);
@@ -426,32 +406,18 @@ void BluezUtil::device_callback(GDBusConnection *connection, const gchar *sender
 ** Message: 15:40:28.494: -- org.freedesktop.DBus.Properties
 */
 void BluezUtil::iface_added_callback(GDBusConnection *connection, const gchar *sender_name, const gchar *object_path, const gchar *interface_name, const gchar *signal_name, GVariant *parameters, gpointer user_data) noexcept {
-    log("iface_added_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
+    //log("iface_added_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
     gchar *path;         //, *key, *attr;
     GVariantIter *iter1; //, *iter2;
-    //GVariant *value;
     g_variant_get(parameters, "(oa{sa{sv}})", &path, &iter1);
-    log("- %s", path);
+    //log("- %s", path);
     try {
         BluetoothDevice device(util->conn, path);
         util->callback(BluetoothEvent::EV_DEVICE_FOUND, &device);
     } catch (std::runtime_error e) {}
-    // log("array size = %zu", g_variant_iter_n_children(iter));
-    /*
-    while (g_variant_iter_next(iter1, "{sa{sv}}", &key, &iter2)) {
-        log("-- %s", key);
-        while (g_variant_iter_next(iter2, "{sv}", &attr, &value)) {
-            log("--- %s : type(%s)", attr, g_variant_get_type_string(value));
-            g_free(attr);
-            g_variant_unref(value);
-        }
-        g_free(key);
-        g_variant_iter_free(iter2);
-    }
-    */
     g_free(path);
     g_variant_iter_free(iter1);
 }
@@ -465,26 +431,18 @@ void BluezUtil::iface_added_callback(GDBusConnection *connection, const gchar *s
 ** Message: 15:40:28.412: - org.bluez.Device1
 */
 void BluezUtil::iface_removed_callback(GDBusConnection *connection, const gchar *sender_name, const gchar *object_path, const gchar *interface_name, const gchar *signal_name, GVariant *parameters, gpointer user_data) noexcept {
-    log("iface_removed_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
+    //log("iface_removed_callback path = %s, interface = %s, signal = %s, %s", object_path, interface_name, signal_name, g_variant_get_type_string(parameters));
     auto util = reinterpret_cast<BluezUtil *>(user_data);
     if (!util->callback) return;
 
-    gchar *path; //, *attr;
+    gchar *path;
     GVariantIter *iter;
     g_variant_get(parameters, "(oas)", &path, &iter);
-    log("- %s", path);
+    //log("- %s", path);
     try {
         BluetoothDevice device(util->conn, path);
         util->callback(BluetoothEvent::EV_DEVICE_REMOVE, &device);
     } catch (std::runtime_error e) {}
-    // no need to parse detail
-    /*
-    log("array size = %zu", g_variant_iter_n_children(iter));
-    while (g_variant_iter_next(iter, "s", &attr)) {
-        log("- %s", attr);
-        g_free(attr);
-    }
-    */
     g_free(path);
     g_variant_iter_free(iter);
 }

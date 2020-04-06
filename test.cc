@@ -7,13 +7,6 @@
 using namespace std;
 using namespace bluez;
 
-#define BLUEZ "org.bluez"
-#define BLUEZ_MANAGER_IFACE "org.freedesktop.DBus.ObjectManager"
-#define BLUEZ_PROPERTY_IFACE "org.freedesktop.DBus.Properties"
-#define BLUEZ_ADAPTER_IFACE "org.bluez.Adapter1"
-#define BLUEZ_DEVICE_IFACE "org.bluez.Device1"
-#define BLUEZ_ADAPTER_OBJ "/org/bluez/hci0"
-
 int main() {
     int ret = EXIT_SUCCESS;
 
@@ -26,7 +19,7 @@ int main() {
     util.StopDiscovery();
     g_message("adapter state = %d", util.GetAdapterState());
     */
-    /*
+
     auto devices = util.GetDevices();
 
     auto d = devices.cbegin();
@@ -36,14 +29,14 @@ int main() {
     }
 
     util.RegisterListener([](BluetoothEvent event, const BluetoothDevice *device) {
-        cout << "event = " << (int)event << ", adapter ? " << (event == EV_ADAPTER) << ", device = " << device << endl;
+        cout << "event = " << BluetoothEventValue(event) << ", adapter ? " << (event == EV_ADAPTER) << ", device = " << device << endl;
     });
 
     util.StartDiscovery();
 
-    GMainLoop *loop = g_main_loop_new(nullptr, false);
-    g_main_loop_run(loop);
-    g_main_loop_unref(loop);
-*/
+    while (1) {
+        sleep(10);
+    }
+
     return ret;
 }
